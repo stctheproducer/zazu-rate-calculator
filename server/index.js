@@ -1,5 +1,6 @@
 /** @format */
 require('dotenv').config()
+const fs = require('fs')
 
 const { createClient } = require('@supabase/supabase-js')
 const qs = require('qs')
@@ -20,54 +21,87 @@ const supabase = createClient(
   globalConfig.supabaseUrl,
   globalConfig.supabaseAnonKey,
 )
+
+let mainUser, mainSession
+
+const login = async () => {
+  const { user, session, error } = await supabase.auth.signIn({
+    email: process.env.SUPABASE_USER,
+    password: process.env.SUPABASE_PASSWORD,
+  })
+
+  if (error) {
+    console.log('Error:', error.status, error.message)
+    return
+  }
+
+  // console.log('User:', user, 'Session:', session)
+  mainUser = user
+  mainSession = session
+}
+
 const getKey = async () => {
-  const { data } = await supabase
+  await login()
+
+  const { data, error } = await supabase
     .from(globalConfig.supabaseTable)
     .select('key')
     .eq('env', globalConfig.supabaseEnv)
   const [first] = data
 
-  return first.key
+  if (error) {
+    console.log('Error:', error.status, error.message)
+    return
+  }
+
+  return first?.key
 }
 
-const instance = axios.create({
-  baseURL: globalConfig.baseURL,
+getKey()
+
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Event:', event, 'Session:', session)
 })
 
-instance.interceptors.request.use(
-  async (config) => {
-    const signingKey = await getKey()
-    const uri = `${config.baseURL}${config.url}?${qs.stringify(config.params)}`
-    console.info(`URI: ${uri}`)
-    // Add authorization header
-    config.headers.Authorization = oath.getAuthorizationHeader(
-      uri,
-      config.method,
-      config.data,
-      globalConfig.consumerKey,
-      signingKey,
-    )
+// const instance = axios.create({
+//   baseURL: globalConfig.baseURL,
+// })
 
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  },
-)
+// instance.interceptors.request.use(
+//   async (config) => {
+//     const signingKey = await getKey()
+//     const uri = `${config.baseURL}${config.url}?${qs.stringify(config.params)}`
+//     console.info(`URI: ${uri}`)
+//     // Add authorization header
+//     config.headers.Authorization = oath.getAuthorizationHeader(
+//       uri,
+//       config.method,
+//       config.data,
+//       globalConfig.consumerKey,
+//       signingKey,
+//     )
 
-instance
-  .get('/conversion-rate', {
-    params: {
-      fxDate: DateTime.now().toISODate(),
-      transCurr: 'EUR',
-      crdhldBillCurr: 'ZMW',
-      bankFee: 4,
-      transAmt: 10.04,
-    },
-  })
-  .then(({ data }) => console.info(data))
-  .catch((err) =>
-    console.error(
-      err.response ? JSON.stringify(err.response.data) : err.message,
-    ),
-  )
+//     return config
+//   },
+//   (error) => {
+//     return Promise.reject(error)
+//   },
+// )
+
+// instance
+//   .get('/conversion-rate', {
+//     params: {
+//       // fxDate: DateTime.now().toISODate(),
+//       fxDate: DateTime.now().minus({ day: 1 }).toISODate(),
+//       transCurr: 'USD',
+//       crdhldBillCurr: 'ZMW',
+//       bankFee: 4,
+//       transAmt: 20,
+//     },
+//   })
+//   .then(({ data }) => console.info(data))
+//   .catch((err) =>
+//     console.error(
+//       err.response ? JSON.stringify(err.response.data) : err.message,
+//     ),
+//   )
